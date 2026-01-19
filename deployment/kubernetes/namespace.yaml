@@ -1,0 +1,8 @@
+# Kubernetes Namespace for B2B AI E-commerce Content Generator
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: b2b-ai-content-generator
+  labels:
+    app: b2b-ai-content-generator
+    environment: production

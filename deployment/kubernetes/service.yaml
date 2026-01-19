@@ -1,0 +1,19 @@
+# Service for B2B AI E-commerce Content Generator
+apiVersion: v1
+kind: Service
+metadata:
+  name: b2b-ai-app-service
+  namespace: b2b-ai-content-generator
+  labels:
+    app: b2b-ai-content-generator
+    component: app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8501
+      targetPort: 8501
+      protocol: TCP
+      name: http
+  selector:
+    app: b2b-ai-content-generator
+    component: app

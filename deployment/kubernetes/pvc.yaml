@@ -1,0 +1,50 @@
+# Persistent Volume Claims for B2B AI E-commerce Content Generator
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-logs-pvc
+  namespace: b2b-ai-content-generator
+  labels:
+    app: b2b-ai-content-generator
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard # Adjust based on your cluster's storage classes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-uploads-pvc
+  namespace: b2b-ai-content-generator
+  labels:
+    app: b2b-ai-content-generator
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard # Adjust based on your cluster's storage classes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-downloads-pvc
+  namespace: b2b-ai-content-generator
+  labels:
+    app: b2b-ai-content-generator
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard # Adjust based on your cluster's storage classes
