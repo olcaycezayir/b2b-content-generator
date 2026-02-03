@@ -5,7 +5,7 @@ This module contains the core business logic for generating product content
 using AI services. It handles both single product and bulk processing operations.
 """
 
-from typing import Dict, Any, Callable, Optional, TYPE_CHECKING
+from typing import Dict, Any, Callable, TYPE_CHECKING
 import pandas as pd
 import json
 import re

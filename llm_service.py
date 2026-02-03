@@ -16,61 +16,58 @@ if TYPE_CHECKING:
 # Import OpenAI with error handling for missing dependency
 try:
     from openai import OpenAI
-    from openai.types.chat import ChatCompletion
     OPENAI_AVAILABLE = True
 except ImportError:
     OpenAI = None
-    ChatCompletion = None
     OPENAI_AVAILABLE = False
 
 
-SALES_MASTER_PROMPT = """
-YOU: You are the world's best e-commerce conversion expert, a neuromarketing genius and SEO strategist. Your name is "SalesFlow".
-YOUR MISSION: Turn raw product information into irresistible sales copy that targets the customer's "Reptilian Brain" (the decision-making part).
+SALES_MASTER_PROMPT = """You are SalesFlow, the world's most advanced e-commerce conversion expert, neuromarketing genius, and SEO strategist.
 
----
-STRATEGIES YOU MUST APPLY:
-1.  **PAS Framework (Problem - Agitation - Solution):**
-    * First make the customer feel the hidden problem they experience.
-    * Then lightly scratch the pain caused by that problem (Agitation).
-    * Finally present the product as the single heroic savior (Solution).
+YOUR MISSION: Transform raw product information into irresistible sales copy that targets the customer's decision-making psychology and drives conversions.
 
-2.  **Benefit-First Language (Feature vs Benefit):**
-    * NEVER just write "5000mAh battery".
-    * WRITE THIS: "A massive 5000mAh power pack that ends the midday low-battery nightmare and frees you from outlets for 2 full days."
+CORE STRATEGIES YOU MUST APPLY:
 
-3.  **Emotional Triggers:**
-    * Speak to Trust, Status, Comfort, Fear (fear of missing out), and Savings.
+1. **PAS Framework (Problem-Agitation-Solution):**
+   - Identify the hidden problem customers experience without this product
+   - Agitate the pain point to create urgency and emotional connection
+   - Present the product as the heroic solution that resolves their pain
 
-4.  **SEO Engineering:**
-    * Place keywords naturally in the flow without forcing them.
-    * Respect hierarchy (H1 must be striking, H2s must be scanner-friendly).
+2. **Benefit-First Language (Never Just Features):**
+   - Transform every feature into a compelling customer benefit
+   - Example: Don't say "5000mAh battery" → Say "All-day power that eliminates midday charging anxiety"
+   - Focus on outcomes, not specifications
 
----
-ABSOLUTE RULES (DO NOT EVER):
-- Ban empty adjectives like "amazing, perfect, unique". Provide proof.
-- Do not use robotic, encyclopedic, or boring language.
-- Address the customer as "you" and build a bond with the product.
+3. **Emotional Triggers & Psychology:**
+   - Tap into core human motivations: Trust, Status, Comfort, FOMO, Savings
+   - Use social proof language and authority positioning
+   - Create desire through scarcity and exclusivity when appropriate
 
----
-REQUESTED OUTPUT FORMAT (MARKDOWN):
-# [ATTENTION-GRABBING PRODUCT TITLE - Under 60 Characters]
+4. **SEO & Conversion Optimization:**
+   - Integrate keywords naturally within compelling copy
+   - Structure content for both search engines and human psychology
+   - Use power words that drive action and engagement
 
-**Short Summary:** (2 curiosity-building sentences that hook the customer in 3 seconds)
+5. **Neuromarketing Principles:**
+   - Appeal to the reptilian brain (survival, reproduction, dominance)
+   - Use concrete, sensory language that creates mental images
+   - Build trust through specificity and proof elements
 
-## Why Do You Need This Product? (Problem & Solution)
-[Write an emotional paragraph using PAS]
+WRITING RULES:
+- Ban empty adjectives like "amazing, perfect, unique" without proof
+- Use "you" to create personal connection and ownership
+- Write with confidence and authority, not corporate speak
+- Make every word earn its place - no fluff or filler
+- Create curiosity gaps that compel continued reading
 
-## Features That Will Change Your Life
-* 🔥 **[Feature 1]:** [Benefit-driven explanation]
-* 🛡️ **[Feature 2]:** [Benefit-driven explanation]
-* ✨ **[Feature 3]:** [Benefit-driven explanation]
+TONE ADAPTATION:
+- Professional: Authoritative, trustworthy, results-focused
+- Casual: Friendly, relatable, conversational yet persuasive
+- Luxury: Sophisticated, exclusive, aspirational
+- Energetic: Dynamic, exciting, action-oriented
+- Minimalist: Clean, direct, elegantly simple
 
-## Technical Details (For the Curious)
-[Technical data in table or list format]
-
-> **Expert Opinion:** [A short, confidence-building note as if a specialist recommends it]
-"""
+Remember: Your goal is conversion, not just information. Every sentence should either build desire, overcome objections, or move toward purchase."""
 
 
 class LLMService:
@@ -82,6 +79,13 @@ class LLMService:
     # Default parameters for content generation
     DEFAULT_MAX_TOKENS = 1000
     DEFAULT_TEMPERATURE = 0.7
+    DEFAULT_TIMEOUT = 30.0
+    
+    # Retry configuration
+    MAX_BACKOFF_DELAY = 60.0  # Maximum delay between retries
+    MAX_RATE_LIMIT_DELAY = 600.0  # Maximum rate limit delay (10 minutes)
+    JITTER_RANGE = (0.5, 1.5)  # Jitter multiplier range
+    RATE_LIMIT_JITTER_RANGE = (0.8, 1.2)  # Rate limit jitter range
     
     def __init__(self, config_manager: 'ConfigurationManager'):
         """Initialize LLM service with configuration manager."""
@@ -184,7 +188,7 @@ class LLMService:
                     ],
                     max_tokens=self.DEFAULT_MAX_TOKENS,
                     temperature=self.DEFAULT_TEMPERATURE,
-                    timeout=30.0  # 30 second timeout
+                    timeout=self.DEFAULT_TIMEOUT
                 )
                 
                 # Validate the response
@@ -207,7 +211,8 @@ class LLMService:
                 error_message = str(e).lower()
                 
                 # Check if this is a rate limit error
-                if "rate limit" in error_message or "quota" in error_message:
+                if ("rate limit" in error_message or "quota" in error_message or 
+                    "429" in error_message or "rate_limit_exceeded" in error_message):
                     if attempt < max_retries:
                         delay = self._handle_rate_limit(attempt)
                         self.logger.warning(f"Rate limit hit, waiting {delay:.2f} seconds before retry {attempt + 1}")
@@ -231,10 +236,11 @@ class LLMService:
                     break
                 
                 # Calculate exponential backoff delay
-                delay = min(base_delay * (2 ** attempt), 60.0)  # Cap at 60 seconds
+                delay = min(base_delay * (2 ** attempt), self.MAX_BACKOFF_DELAY)
                 
                 # Add jitter to prevent thundering herd
-                delay *= (0.5 + random.random() * 0.5)
+                jitter_min, jitter_max = self.JITTER_RANGE
+                delay *= (jitter_min + random.random() * (jitter_max - jitter_min))
                 
                 self.logger.warning(
                     f"API call attempt {attempt + 1} failed: {type(e).__name__}: {e}. "
@@ -244,6 +250,10 @@ class LLMService:
                 time.sleep(delay)
         
         # All retries exhausted
+        if last_exception is None:
+            # This should never happen due to max_retries clamping, but defensive programming
+            last_exception = Exception("All retry attempts failed with no recorded exception")
+        
         self.logger.error(f"All {max_retries + 1} API call attempts failed. Last error: {last_exception}")
         raise last_exception
     
@@ -263,11 +273,12 @@ class LLMService:
         # Exponential backoff for rate limits: 60s, 120s, 240s, etc.
         delay = base_delay * (2 ** retry_count)
         
-        # Cap the maximum delay at 10 minutes
-        delay = min(delay, 600.0)
+        # Cap the maximum delay at the configured limit
+        delay = min(delay, self.MAX_RATE_LIMIT_DELAY)
         
         # Add some jitter to prevent synchronized retries
-        jitter = random.uniform(0.8, 1.2)
+        jitter_min, jitter_max = self.RATE_LIMIT_JITTER_RANGE
+        jitter = random.uniform(jitter_min, jitter_max)
         delay *= jitter
         
         return delay
@@ -294,8 +305,12 @@ class LLMService:
                 self.logger.error("Response choices is empty")
                 return False
             
-            # Check if first choice has message attribute
-            first_choice = response.choices[0]
+            # Check if we can access the first choice safely
+            try:
+                first_choice = response.choices[0]
+            except (IndexError, TypeError) as e:
+                self.logger.error(f"Cannot access first choice: {e}")
+                return False
             if not hasattr(first_choice, 'message'):
                 self.logger.error("Response choice missing 'message' attribute")
                 return False
