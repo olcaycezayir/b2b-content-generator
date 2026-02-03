@@ -8,11 +8,10 @@ retry logic, rate limiting, and response validation.
 from typing import Any, Optional, TYPE_CHECKING
 import time
 import logging
-import json
 import random
 
 if TYPE_CHECKING:
-    from utils import ConfigurationManager, ErrorHandler
+    from utils import ConfigurationManager
 
 # Import OpenAI with error handling for missing dependency
 try:
@@ -23,6 +22,55 @@ except ImportError:
     OpenAI = None
     ChatCompletion = None
     OPENAI_AVAILABLE = False
+
+
+SALES_MASTER_PROMPT = """
+YOU: You are the world's best e-commerce conversion expert, a neuromarketing genius and SEO strategist. Your name is "SalesFlow".
+YOUR MISSION: Turn raw product information into irresistible sales copy that targets the customer's "Reptilian Brain" (the decision-making part).
+
+---
+STRATEGIES YOU MUST APPLY:
+1.  **PAS Framework (Problem - Agitation - Solution):**
+    * First make the customer feel the hidden problem they experience.
+    * Then lightly scratch the pain caused by that problem (Agitation).
+    * Finally present the product as the single heroic savior (Solution).
+
+2.  **Benefit-First Language (Feature vs Benefit):**
+    * NEVER just write "5000mAh battery".
+    * WRITE THIS: "A massive 5000mAh power pack that ends the midday low-battery nightmare and frees you from outlets for 2 full days."
+
+3.  **Emotional Triggers:**
+    * Speak to Trust, Status, Comfort, Fear (fear of missing out), and Savings.
+
+4.  **SEO Engineering:**
+    * Place keywords naturally in the flow without forcing them.
+    * Respect hierarchy (H1 must be striking, H2s must be scanner-friendly).
+
+---
+ABSOLUTE RULES (DO NOT EVER):
+- Ban empty adjectives like "amazing, perfect, unique". Provide proof.
+- Do not use robotic, encyclopedic, or boring language.
+- Address the customer as "you" and build a bond with the product.
+
+---
+REQUESTED OUTPUT FORMAT (MARKDOWN):
+# [ATTENTION-GRABBING PRODUCT TITLE - Under 60 Characters]
+
+**Short Summary:** (2 curiosity-building sentences that hook the customer in 3 seconds)
+
+## Why Do You Need This Product? (Problem & Solution)
+[Write an emotional paragraph using PAS]
+
+## Features That Will Change Your Life
+* 🔥 **[Feature 1]:** [Benefit-driven explanation]
+* 🛡️ **[Feature 2]:** [Benefit-driven explanation]
+* ✨ **[Feature 3]:** [Benefit-driven explanation]
+
+## Technical Details (For the Curious)
+[Technical data in table or list format]
+
+> **Expert Opinion:** [A short, confidence-building note as if a specialist recommends it]
+"""
 
 
 class LLMService:
@@ -112,6 +160,9 @@ class LLMService:
         if max_retries is None:
             max_retries = self.config_manager.get_int_config('MAX_RETRIES', 3)
         
+        # Clamp max_retries to at least 0 to prevent empty range
+        max_retries = max(0, max_retries)
+        
         base_delay = self.config_manager.get_float_config('RETRY_DELAY_BASE', 1.0)
         
         last_exception = None
@@ -124,7 +175,7 @@ class LLMService:
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are an expert e-commerce content generator. Generate high-quality, SEO-optimized product content."
+                            "content": SALES_MASTER_PROMPT
                         },
                         {
                             "role": "user", 
@@ -223,7 +274,7 @@ class LLMService:
     
     def _validate_api_response(self, response: Any) -> bool:
         """
-        Validate API response structure before returning content.
+        Validate API response structure using duck-typing.
         
         Args:
             response: The response object from OpenAI API
@@ -232,26 +283,27 @@ class LLMService:
             True if response is valid, False otherwise
         """
         try:
-            # Check if response is the expected type
-            if not isinstance(response, ChatCompletion):
-                self.logger.error(f"Invalid response type: {type(response)}")
+            # Use duck-typing to check for expected structure
+            # Check if response has choices attribute
+            if not hasattr(response, 'choices'):
+                self.logger.error("Response missing 'choices' attribute")
                 return False
             
-            # Check if response has choices
-            if not hasattr(response, 'choices') or not response.choices:
-                self.logger.error("Response missing choices")
+            # Check if choices is not empty
+            if not response.choices:
+                self.logger.error("Response choices is empty")
                 return False
             
-            # Check if first choice has message
+            # Check if first choice has message attribute
             first_choice = response.choices[0]
             if not hasattr(first_choice, 'message'):
-                self.logger.error("Response choice missing message")
+                self.logger.error("Response choice missing 'message' attribute")
                 return False
             
-            # Check if message has content
+            # Check if message has content attribute
             message = first_choice.message
             if not hasattr(message, 'content'):
-                self.logger.error("Response message missing content")
+                self.logger.error("Response message missing 'content' attribute")
                 return False
             
             # Check if content is not None (empty string is valid)
